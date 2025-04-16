@@ -452,7 +452,7 @@
             
             <div class="form-group">
                 <label for="valor">Valor do Serviço (R$)</label>
-                <input type="number" id="valor" step="0.01" placeholder="0,00">
+                <input type="text" id="valor" placeholder="0,00" oninput="formatarValorInput(this)">
             </div>
             
             <button type="submit" id="submitBtn">Salvar Registro</button>
@@ -461,9 +461,7 @@
     </div>
     
     <div class="export-buttons">
-        <button id="exportJson" class="export-btn">Exportar para JSON</button>
         <button id="exportCsv" class="export-btn">Exportar para Excel</button>
-        <button id="importJson" class="export-btn">Importar Dados</button>
     </div>
     
     <table class="clientes-table" id="clientesTable">
@@ -474,6 +472,7 @@
                 <th>Placa</th>
                 <th>Contato</th>
                 <th>Serviço</th>
+                <th>Valor</th>
                 <th>Ações</th>
             </tr>
         </thead>
@@ -489,18 +488,6 @@
             <h2 style="color: #ff3333; text-shadow: 0 0 5px rgba(255, 0, 0, 0.5);">Detalhes do Serviço</h2>
             <div id="servicosModalContent" style="white-space: pre-wrap; margin-top: 20px; line-height: 1.6;"></div>
             <div id="servicoValor" style="margin-top: 20px; font-weight: bold; color: #ffcc00;"></div>
-        </div>
-    </div>
-    
-    <!-- Modal para importar dados -->
-    <div id="importModal" class="modal">
-        <div class="modal-content">
-            <span class="close">&times;</span>
-            <h2 style="color: #ff3333; text-shadow: 0 0 5px rgba(255, 0, 0, 0.5);">Importar Dados</h2>
-            <p>Selecione um arquivo JSON para importar os registros:</p>
-            <input type="file" id="fileInput" accept=".json" style="margin: 15px 0; padding: 10px; background: #333; color: #fff; border: 1px solid #444; border-radius: 4px; width: 100%;">
-            <button id="confirmImport" class="export-btn" style="margin-top: 15px; width: 100%;">Importar Registros</button>
-            <div id="importError" class="error" style="margin-top: 15px;"></div>
         </div>
     </div>
     
@@ -522,13 +509,30 @@
         const modalContent = document.getElementById('servicosModalContent');
         const servicoValor = document.getElementById('servicoValor');
         const closeModal = document.querySelectorAll('.close');
-        const exportJsonBtn = document.getElementById('exportJson');
         const exportCsvBtn = document.getElementById('exportCsv');
-        const importJsonBtn = document.getElementById('importJson');
-        const importModal = document.getElementById('importModal');
-        const fileInput = document.getElementById('fileInput');
-        const confirmImportBtn = document.getElementById('confirmImport');
-        const importError = document.getElementById('importError');
+        
+        // Função para formatar valor monetário no input
+        function formatarValorInput(input) {
+            // Remove tudo que não é número
+            let value = input.value.replace(/\D/g, '');
+            
+            // Adiciona os zeros necessários para os centavos
+            if (value.length === 0) {
+                value = '000';
+            } else if (value.length === 1) {
+                value = '00' + value;
+            } else if (value.length === 2) {
+                value = '0' + value;
+            }
+            
+            // Formata como moeda
+            const formatted = (parseInt(value) / 100).toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+            
+            input.value = formatted;
+        }
         
         // Máscara para CPF
         document.getElementById('cpf').addEventListener('input', function(e) {
@@ -571,16 +575,6 @@
                 value = value.substring(0, 3) + '-' + value.substring(3);
             }
             
-            e.target.value = value;
-        });
-        
-        // Formatar valor monetário
-        document.getElementById('valor').addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\D/g, '');
-            value = (value/100).toFixed(2) + '';
-            value = value.replace(".", ",");
-            value = value.replace(/(\d)(\d{3})(\d{3}),/g, "$1.$2.$3,");
-            value = value.replace(/(\d)(\d{3}),/g, "$1.$2,");
             e.target.value = value;
         });
         
@@ -643,10 +637,16 @@
             return true;
         }
         
-        // Função para formatar valor monetário
+        // Função para formatar valor monetário para exibição
         function formatarValor(valor) {
             if (!valor) return 'R$ 0,00';
             return 'R$ ' + parseFloat(valor).toFixed(2).replace('.', ',').replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.');
+        }
+        
+        // Função para converter valor formatado para número
+        function parseValor(valorFormatado) {
+            if (!valorFormatado) return 0;
+            return parseFloat(valorFormatado.replace(/\./g, '').replace(',', '.'));
         }
         
         // Função para pesquisar registros
@@ -707,7 +707,7 @@
                 placa: document.getElementById('placa').value.trim().toUpperCase(),
                 ano: document.getElementById('ano').value.trim(),
                 servicos: document.getElementById('servicos').value.trim(),
-                valor: document.getElementById('valor').value.replace(/\D/g, '') || '0'
+                valor: parseValor(document.getElementById('valor').value) || 0
             };
             
             let isValid = true;
@@ -786,14 +786,12 @@
         closeModal.forEach(btn => {
             btn.addEventListener('click', function() {
                 servicosModal.style.display = 'none';
-                importModal.style.display = 'none';
             });
         });
         
         window.addEventListener('click', function(event) {
-            if (event.target === servicosModal || event.target === importModal) {
+            if (event.target === servicosModal) {
                 servicosModal.style.display = 'none';
-                importModal.style.display = 'none';
             }
         });
         
@@ -804,13 +802,21 @@
             servicosModal.style.display = 'block';
         }
         
+        // Função para destacar texto encontrado na pesquisa
+        function highlightText(text, term) {
+            if (!term) return text;
+            
+            const regex = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+            return text.replace(regex, '<span class="match">$1</span>');
+        }
+        
         // Função para renderizar a lista de clientes
         function renderClientes(listaClientes = clientes) {
             clientesList.innerHTML = '';
             
             if (listaClientes.length === 0) {
                 const row = document.createElement('tr');
-                row.innerHTML = `<td colspan="6" style="text-align: center;">Nenhum registro encontrado</td>`;
+                row.innerHTML = `<td colspan="7" style="text-align: center;">Nenhum registro encontrado</td>`;
                 clientesList.appendChild(row);
                 return;
             }
@@ -854,6 +860,7 @@
                     <td>${placaDisplay}</td>
                     <td>${cliente.telefone || '--'}</td>
                     <td>${servicosResumo}</td>
+                    <td>${formatarValor(cliente.valor)}</td>
                     <td class="actions">
                         <a href="#" class="edit-btn" data-id="${cliente.id}">Editar</a>
                         <a href="#" class="delete-btn" data-id="${cliente.id}">Excluir</a>
@@ -906,7 +913,7 @@
                 document.getElementById('ano').value = cliente.ano || '';
                 document.getElementById('servicos').value = cliente.servicos || '';
                 document.getElementById('valor').value = cliente.valor ? 
-                    parseFloat(cliente.valor/100).toFixed(2).replace('.', ',') : '';
+                    (cliente.valor / 100).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '';
                 
                 // Atualizar contador de caracteres
                 const length = cliente.servicos ? cliente.servicos.length : 0;
@@ -927,17 +934,6 @@
             clientes = clientes.filter(c => c.id !== id);
             renderClientes(clientes);
             searchInput.value = '';
-        }
-        
-        // Função para exportar para JSON
-        function exportToJson() {
-            const dataStr = JSON.stringify(clientes, null, 2);
-            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-            
-            const linkElement = document.createElement('a');
-            linkElement.setAttribute('href', dataUri);
-            linkElement.setAttribute('download', `pedrao_cambio_${new Date().toISOString().split('T')[0]}.json`);
-            linkElement.click();
         }
         
         // Função para exportar para CSV
@@ -971,73 +967,8 @@
             linkElement.click();
         }
         
-        // Função para importar de JSON
-        function importFromJson() {
-            importModal.style.display = 'block';
-            importError.textContent = '';
-            fileInput.value = '';
-        }
-        
-        // Eventos dos botões de exportação/importação
-        exportJsonBtn.addEventListener('click', exportToJson);
+        // Evento do botão de exportação
         exportCsvBtn.addEventListener('click', exportToCsv);
-        importJsonBtn.addEventListener('click', importFromJson);
-        
-        // Evento para confirmar importação
-        confirmImportBtn.addEventListener('click', function() {
-            const file = fileInput.files[0];
-            if (!file) {
-                importError.textContent = 'Por favor, selecione um arquivo.';
-                return;
-            }
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const importedData = JSON.parse(e.target.result);
-                    
-                    if (!Array.isArray(importedData)) {
-                        importError.textContent = 'O arquivo deve conter um array de registros.';
-                        return;
-                    }
-                    
-                    const isValid = importedData.every(item => 
-                        item.nome && item.cpf && item.telefone && item.marca && item.modelo && item.placa && item.servicos
-                    );
-                    
-                    if (!isValid) {
-                        importError.textContent = 'O arquivo não contém dados válidos da oficina.';
-                        return;
-                    }
-                    
-                    const cpfsExistentes = clientes.map(c => c.cpf.replace(/\D/g, ''));
-                    const cpfsImportados = importedData.map(c => c.cpf.replace(/\D/g, ''));
-                    
-                    const duplicados = cpfsImportados.filter(cpf => cpfsExistentes.includes(cpf));
-                    
-                    if (duplicados.length > 0) {
-                        if (!confirm(`Atenção: ${duplicados.length} registro(s) com CPF já existente serão sobrescritos. Deseja continuar?`)) {
-                            return;
-                        }
-                        
-                        clientes = clientes.filter(c => !duplicados.includes(c.cpf.replace(/\D/g, '')));
-                    }
-                    
-                    clientes = [...clientes, ...importedData];
-                    renderClientes(clientes);
-                    importModal.style.display = 'none';
-                    
-                    alert(`${importedData.length} registro(s) importados com sucesso!`);
-                } catch (error) {
-                    importError.textContent = 'Erro ao ler o arquivo. Certifique-se de que é um JSON válido.';
-                    console.error(error);
-                }
-            };
-            reader.onerror = function() {
-                importError.textContent = 'Erro ao ler o arquivo.';
-            };
-            reader.readAsText(file);
-        });
         
         // Inicializar a lista de clientes
         renderClientes();
